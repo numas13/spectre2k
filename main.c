@@ -32,11 +32,9 @@ void spectre_sw_impl(bool **c, uint8_t *map, const uint8_t *p, size_t i) {
 void (*spectre_sw)(bool **c, uint8_t *map, const uint8_t *p, size_t i) = &spectre_sw_impl;
 
 static inline void cache_flush(void *p, size_t l) {
-    asm volatile("wait st_c = 1\n\t");
     for (size_t i = 0; i < l; i += CACHE_LINE_SIZE) {
       __builtin_storemas_64u(0, &(p[i]), 0xf, 2);
     }
-    asm volatile("wait fl_c = 1\n\t");
 }
 
 static uint64_t find(const uint8_t *map) {

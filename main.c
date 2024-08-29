@@ -32,7 +32,11 @@ void (*spectre_sw)(bool **c, uint8_t *map, const uint8_t *p, size_t i) = &spectr
 static inline void cache_flush(const void *p, size_t l) {
     asm volatile("wait st_c = 1\n\t");
     for (size_t i = 0; i < l; i += CACHE_LINE_SIZE) {
+#ifdef __PROTECTED__
+        asm("stapd,2 [ %[p] ], %[z], mas=0xf\n\t"
+#else
         asm("std,2 [ %[p] ], %[z], mas=0xf\n\t"
+#endif
            :
            : [z] "r" (0), [p] "r" (p + i)
            : "memory"

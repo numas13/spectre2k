@@ -7,6 +7,14 @@
 
 #include <e2kbuiltin.h>
 
+#define black_box(value) ({ \
+        uint64_t ret = value; \
+        asm("" : "+r"(ret)); \
+        ret; \
+    })
+
+#define black_box_mem(value) asm("" : : "m"(value))
+
 #define CACHE_LINE_SIZE 64
 #define MAP_SIZE (256 * CACHE_LINE_SIZE)
 
@@ -44,10 +52,11 @@ static int64_t find(const uint8_t *map) {
     uint64_t acc = 0;
     for (int i = 0; i < 256; ++i) {
         uint64_t time = clk();
-        acc += map[map[i * CACHE_LINE_SIZE]];
+        acc += map[map[black_box(i) * CACHE_LINE_SIZE]];
         time = clk() - time;
         value = time < min ? i : value;
         min = time < min ? time : min;
+        black_box_mem(time); // XXX: hack for clang+lccrt
     }
     acc = (acc << 8) | value;
     return min > 32 ? -acc : acc;
